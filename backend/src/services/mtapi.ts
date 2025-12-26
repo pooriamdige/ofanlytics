@@ -58,15 +58,49 @@ export class MTAPIClient {
         timeout: 30000,
       });
       
-      if (!response.data?.session_id) {
-        throw new MTAPIError('Invalid response from ConnectEx: missing session_id');
+      // Log response for debugging
+      if (!response.data) {
+        console.error('ConnectEx: No response data', { status: response.status, headers: response.headers });
+        throw new MTAPIError('Invalid response from ConnectEx: no data received');
       }
       
-      return response.data.session_id;
+      // Handle different response formats
+      let sessionId: string | undefined;
+      
+      if (typeof response.data === 'string') {
+        // Response might be plain string UUID
+        sessionId = response.data.trim();
+      } else if (typeof response.data === 'object') {
+        // Try different possible field names
+        sessionId = response.data.session_id || 
+                   response.data.sessionId || 
+                   response.data.id ||
+                   (response.data as any).session;
+      }
+      
+      if (!sessionId) {
+        console.error('ConnectEx: Response data structure:', JSON.stringify(response.data, null, 2));
+        throw new MTAPIError(`Invalid response from ConnectEx: missing session_id. Response: ${JSON.stringify(response.data)}`);
+      }
+      
+      return sessionId;
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+        console.error('ConnectEx error:', {
+          status,
+          data,
+          message: error.message,
+          url: error.config?.url,
+        });
+        
+        if (status === 401 || status === 403) {
+          throw new MTAPIError('Invalid credentials or access denied', error);
+        }
+        
         throw new MTAPIError(
-          `ConnectEx failed: ${error.message}`,
+          `ConnectEx failed: ${error.message} (Status: ${status})`,
           error
         );
       }

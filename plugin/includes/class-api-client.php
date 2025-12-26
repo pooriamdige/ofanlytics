@@ -116,5 +116,40 @@ class OneFunders_Analytics_API_Client {
         $full_url = rtrim($this->api_url, '/') . '/' . ltrim($url, '/');
         return $full_url;
     }
+    
+    /**
+     * Check backend connectivity
+     */
+    public function check_connectivity() {
+        $url = rtrim($this->api_url, '/') . '/health';
+        
+        $response = wp_remote_get($url, array(
+            'timeout' => 10,
+        ));
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => $response->get_error_message(),
+            );
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $decoded = json_decode($body, true);
+        
+        if ($status_code === 200 && isset($decoded['status']) && $decoded['status'] === 'ok') {
+            return array(
+                'success' => true,
+                'message' => 'Connected successfully',
+                'database' => $decoded['database'] ?? 'unknown',
+            );
+        }
+        
+        return array(
+            'success' => false,
+            'message' => 'Backend returned status code: ' . $status_code,
+        );
+    }
 }
 

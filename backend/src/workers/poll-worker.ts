@@ -44,13 +44,33 @@ async function processAccount(account: any): Promise<void> {
     
     // Check session health
     if (!isSessionValid(account)) {
-      console.log(`Reconnecting account ${account.id}...`);
+      console.log(`Reconnecting account ${account.id} (login: ${account.login}, server: ${account.server})...`);
       const password = decrypt(account.investor_password_encrypted);
-      const sessionId = await mtapiClient.withRetry(
-        () => mtapiClient.connectEx(account.login, password, account.server),
-        3,
-        1000
-      );
+      
+      let sessionId: string;
+      try {
+        sessionId = await mtapiClient.withRetry(
+          () => mtapiClient.connectEx(account.login, password, account.server),
+          3,
+          1000
+        );
+        
+        if (!sessionId || sessionId.trim() === '') {
+          throw new Error('ConnectEx returned empty session_id');
+        }
+        
+        console.log(`Account ${account.id} connected, session_id: ${sessionId.substring(0, 8)}...`);
+      } catch (error: any) {
+        console.error(`Failed to connect account ${account.id}:`, error.message);
+        await db('accounts')
+          .where({ id: account.id })
+          .update({
+            connection_state: 'error',
+            session_id: null,
+            session_expires_at: null,
+          });
+        throw error;
+      }
 
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 

@@ -43,7 +43,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 /**
  * POST /api/accounts
- * Create account
+ * Create or update account (upsert by login + server)
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -53,26 +53,81 @@ router.post('/', async (req: Request, res: Response) => {
       throw new ValidationError('Missing required fields: wp_user_id, login, server, investor_password');
     }
 
+    // Check if account already exists (by login + server)
+    const existing = await db('accounts')
+      .where({ login, server })
+      .first();
+
     // Encrypt password
     const encryptedPassword = encrypt(investor_password);
 
-    const [account] = await db('accounts')
-      .insert({
-        wp_user_id,
-        login,
-        server,
-        investor_password_encrypted: encryptedPassword,
-        plan_id: plan_id || null,
-        connection_state: 'disconnected',
-        monitoring_state: 'normal',
-        created_at: new Date(),
+    let account;
+    
+    if (existing) {
+      // Update existing account
+      const updates: any = {
         updated_at: new Date(),
-      })
-      .returning(['id', 'wp_user_id', 'login', 'server', 'plan_id', 'is_failed', 'connection_state', 'monitoring_state', 'created_at']);
+      };
+      
+      // Update password if provided
+      if (investor_password) {
+        updates.investor_password_encrypted = encryptedPassword;
+      }
+      
+      // Update plan_id if provided
+      if (plan_id !== undefined) {
+        updates.plan_id = plan_id || null;
+      }
+      
+      // Update wp_user_id if different (in case of reassignment)
+      if (wp_user_id !== existing.wp_user_id) {
+        updates.wp_user_id = wp_user_id;
+      }
+      
+      await db('accounts')
+        .where({ id: existing.id })
+        .update(updates);
 
-    res.status(201).json({ account });
+      account = await db('accounts')
+        .leftJoin('plans', 'accounts.plan_id', 'plans.id')
+        .where({ 'accounts.id': existing.id })
+        .select(
+          'accounts.id',
+          'accounts.wp_user_id',
+          'accounts.login',
+          'accounts.server',
+          'accounts.plan_id',
+          'plans.name as plan_name',
+          'accounts.is_failed',
+          'accounts.failure_reason',
+          'accounts.connection_state',
+          'accounts.monitoring_state',
+          'accounts.last_seen',
+          'accounts.created_at'
+        )
+        .first();
+
+      res.json({ account, updated: true });
+    } else {
+      // Create new account
+      [account] = await db('accounts')
+        .insert({
+          wp_user_id,
+          login,
+          server,
+          investor_password_encrypted: encryptedPassword,
+          plan_id: plan_id || null,
+          connection_state: 'disconnected',
+          monitoring_state: 'normal',
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .returning(['id', 'wp_user_id', 'login', 'server', 'plan_id', 'is_failed', 'connection_state', 'monitoring_state', 'created_at']);
+
+      res.status(201).json({ account, updated: false });
+    }
   } catch (error: any) {
-    if (error.code === '23505') { // Unique violation
+    if (error.code === '23505') { // Unique violation (shouldn't happen with our logic, but just in case)
       res.status(409).json({ error: { code: 'DUPLICATE_ACCOUNT', message: 'Account with this login and server already exists' } });
     } else {
       res.status(400).json({ error: formatError(error) });
