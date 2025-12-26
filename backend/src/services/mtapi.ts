@@ -8,11 +8,47 @@ export interface ConnectExResponse {
 export interface AccountSummaryResponse {
   balance: number;
   equity: number;
-  margin: number;
-  free_margin: number;
-  margin_level: number;
+  credit?: number;
+  profit?: number;
+  margin?: number;
+  freeMargin?: number;
+  marginLevel?: number;
+  leverage?: number;
+  currency?: string;
+  method?: string;
+  type?: string;
+  isInvestor?: boolean;
 }
 
+export interface MTAPIOrder {
+  ticket: number;
+  orderType: string;
+  symbol: string;
+  lots: number;
+  openPrice: number;
+  closePrice?: number;
+  profit: number;
+  swap: number;
+  commission: number;
+  fee?: number;
+  openTime: string;
+  closeTime?: string;
+  comment?: string;
+  state?: string;
+  dealType?: string;
+  volume?: number; // Base units (e.g., 700000000 = 7 lots)
+  contractSize?: number;
+}
+
+export interface OrderHistoryResponse {
+  orders: MTAPIOrder[];
+  internalDeals?: any[];
+  internalOrders?: any[];
+  action?: number;
+  partialResponse?: boolean;
+}
+
+// Normalized order format for our database
 export interface Order {
   order_id: number;
   symbol: string;
@@ -26,10 +62,6 @@ export interface Order {
   time_open: string;
   time_close?: string;
   comment?: string;
-}
-
-export interface OrderHistoryResponse {
-  orders: Order[];
 }
 
 export class MTAPIClient {
@@ -46,41 +78,34 @@ export class MTAPIClient {
 
   /**
    * Connect to MTAPI and get session ID
+   * Response is a plain UUID string (not JSON)
    */
   async connectEx(login: string, password: string, server: string): Promise<string> {
     try {
-      const response = await this.client.get<ConnectExResponse>('/ConnectEx', {
+      const response = await this.client.get('/ConnectEx', {
         params: {
           user: login,
           password,
           server,
+          connectTimeoutSeconds: 60,
+          connectTimeoutClusterMemberSeconds: 20,
         },
         timeout: 30000,
+        responseType: 'text', // MTAPI returns plain text UUID, not JSON
       });
       
-      // Log response for debugging
+      // Response is a plain UUID string
       if (!response.data) {
         console.error('ConnectEx: No response data', { status: response.status, headers: response.headers });
         throw new MTAPIError('Invalid response from ConnectEx: no data received');
       }
       
-      // Handle different response formats
-      let sessionId: string | undefined;
+      // Trim whitespace and validate it looks like a UUID
+      const sessionId = String(response.data).trim();
       
-      if (typeof response.data === 'string') {
-        // Response might be plain string UUID
-        sessionId = response.data.trim();
-      } else if (typeof response.data === 'object') {
-        // Try different possible field names
-        sessionId = response.data.session_id || 
-                   response.data.sessionId || 
-                   response.data.id ||
-                   (response.data as any).session;
-      }
-      
-      if (!sessionId) {
-        console.error('ConnectEx: Response data structure:', JSON.stringify(response.data, null, 2));
-        throw new MTAPIError(`Invalid response from ConnectEx: missing session_id. Response: ${JSON.stringify(response.data)}`);
+      if (!sessionId || sessionId.length < 30) {
+        console.error('ConnectEx: Invalid session ID format:', sessionId);
+        throw new MTAPIError(`Invalid response from ConnectEx: invalid session ID format. Response: ${sessionId}`);
       }
       
       return sessionId;
@@ -139,30 +164,50 @@ export class MTAPIClient {
   }
 
   /**
-   * Get order history
+   * Get order history and normalize to our format
+   * Returns normalized orders with raw MTAPI data attached
    */
   async orderHistory(
     sessionId: string,
     from: string,
     to: string = new Date().toISOString()
-  ): Promise<Order[]> {
+  ): Promise<Array<Order & { _raw?: MTAPIOrder }>> {
     try {
       const response = await this.client.get<OrderHistoryResponse>('/OrderHistory', {
         params: {
           id: sessionId,
           from,
           to,
+          sort: 'CloseTime',
+          ascending: true,
         },
         timeout: 60000, // 60 seconds for large datasets
       });
       
       // Ensure orders is always an array
-      const orders = response.data?.orders || [];
-      if (!Array.isArray(orders)) {
+      const mtapiOrders = response.data?.orders || [];
+      if (!Array.isArray(mtapiOrders)) {
         return [];
       }
       
-      return orders;
+      // Normalize MTAPI order format to our database format
+      const normalizedOrders: Array<Order & { _raw?: MTAPIOrder }> = mtapiOrders.map((mtapiOrder: MTAPIOrder) => ({
+        order_id: mtapiOrder.ticket,
+        symbol: mtapiOrder.symbol || '',
+        type: mtapiOrder.orderType || mtapiOrder.dealType || '',
+        volume: mtapiOrder.lots || 0, // Use lots field, not volume (volume is in base units)
+        price_open: mtapiOrder.openPrice || 0,
+        price_close: mtapiOrder.closePrice,
+        profit: mtapiOrder.profit || 0,
+        swap: mtapiOrder.swap || 0,
+        commission: mtapiOrder.commission || 0,
+        time_open: mtapiOrder.openTime,
+        time_close: mtapiOrder.closeTime,
+        comment: mtapiOrder.comment || '',
+        _raw: mtapiOrder, // Attach original for raw_data storage
+      }));
+      
+      return normalizedOrders;
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;

@@ -122,10 +122,10 @@ async function processAccount(account: any): Promise<void> {
     let fromDate: Date;
     
     if (!account.last_orders_fetched_at) {
-      // First time fetching orders - get from start of 2025 or account creation
-      const startOf2025 = new Date('2025-01-01T00:00:00Z');
-      const accountCreated = account.created_at ? new Date(account.created_at) : startOf2025;
-      fromDate = accountCreated > startOf2025 ? accountCreated : startOf2025;
+      // First time fetching orders - get from June 1, 2025 or account creation (whichever is later)
+      const startOfJune2025 = new Date('2025-06-01T00:00:00Z');
+      const accountCreated = account.created_at ? new Date(account.created_at) : startOfJune2025;
+      fromDate = accountCreated > startOfJune2025 ? accountCreated : startOfJune2025;
     } else {
       // Subsequent fetches - get from last fetch time
       fromDate = new Date(account.last_orders_fetched_at);
@@ -143,10 +143,13 @@ async function processAccount(account: any): Promise<void> {
     // Process orders
     let ordersProcessed = 0;
     for (const order of orders) {
-      const isDemoDeposit = order.type === 'balance' && 
+      // Demo deposit detection: orderType is "Balance" and comment contains "Demo deposit"
+      const isDemoDeposit = order.type === 'Balance' && 
                            order.profit > 0 && 
-                           (order.comment?.toLowerCase().includes('deposit') || 
-                            order.comment?.toLowerCase().includes('demo'));
+                           order.comment?.toLowerCase().includes('demo deposit');
+
+      // Extract raw MTAPI order data (stored in _raw field)
+      const rawOrderData = (order as any)._raw || order;
 
       await db('orders')
         .insert({
@@ -164,7 +167,7 @@ async function processAccount(account: any): Promise<void> {
           time_close: order.time_close ? new Date(order.time_close) : null,
           is_demo_deposit: isDemoDeposit,
           plan_id: account.plan_id,
-          raw_data: order,
+          raw_data: rawOrderData, // Store original MTAPI order structure
         })
         .onConflict(['account_id', 'order_id'])
         .merge();
