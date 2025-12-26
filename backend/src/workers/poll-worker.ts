@@ -131,14 +131,15 @@ async function processAccount(account: any): Promise<void> {
       fromDate = new Date(account.last_orders_fetched_at);
     }
 
-    // Get order history
+    // Get order history (to date is current time)
+    const toDate = new Date();
     const orders = await mtapiClient.withRetry(
-      () => mtapiClient.orderHistory(account.session_id, fromDate.toISOString()),
+      () => mtapiClient.orderHistory(account.session_id, fromDate, toDate),
       2,
       1000
     );
 
-    console.log(`Account ${account.id}: Fetched ${orders.length} orders from ${fromDate.toISOString()}`);
+    console.log(`Account ${account.id}: Fetched ${orders.length} orders from ${fromDate.toISOString()} to ${toDate.toISOString()}`);
 
     // Process orders
     let ordersProcessed = 0;

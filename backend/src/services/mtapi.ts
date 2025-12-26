@@ -164,50 +164,113 @@ export class MTAPIClient {
   }
 
   /**
+   * Format date to MT5 API format: yyyy-MM-ddTHH:mm:ss (no milliseconds, no timezone)
+   */
+  private formatMT5Date(date: Date | string): string {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const hours = String(d.getUTCHours()).padStart(2, '0');
+    const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(d.getUTCSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+  }
+
+  /**
    * Get order history and normalize to our format
    * Returns normalized orders with raw MTAPI data attached
    */
   async orderHistory(
     sessionId: string,
-    from: string,
-    to: string = new Date().toISOString()
+    from: Date | string,
+    to: Date | string = new Date()
   ): Promise<Array<Order & { _raw?: MTAPIOrder }>> {
     try {
+      // Format dates in MT5 format: yyyy-MM-ddTHH:mm:ss
+      const fromFormatted = this.formatMT5Date(from);
+      const toFormatted = this.formatMT5Date(to);
+      
+      // Ensure from is before to
+      const fromDate = typeof from === 'string' ? new Date(from) : from;
+      const toDate = typeof to === 'string' ? new Date(to) : to;
+      
+      if (fromDate >= toDate) {
+        console.warn(`OrderHistory: from date (${fromFormatted}) is not before to date (${toFormatted}), adjusting...`);
+        // If from >= to, set to to current time
+        const now = new Date();
+        const toFormattedFixed = this.formatMT5Date(now);
+        console.log(`Using to date: ${toFormattedFixed}`);
+        
+        const response = await this.client.get<OrderHistoryResponse>('/OrderHistory', {
+          params: {
+            id: sessionId,
+            from: fromFormatted,
+            to: toFormattedFixed,
+            sort: 'CloseTime',
+            ascending: true,
+          },
+          timeout: 60000,
+        });
+        
+        return this.processOrderHistoryResponse(response);
+      }
+      
       const response = await this.client.get<OrderHistoryResponse>('/OrderHistory', {
         params: {
           id: sessionId,
-          from,
-          to,
+          from: fromFormatted,
+          to: toFormatted,
           sort: 'CloseTime',
           ascending: true,
         },
         timeout: 60000, // 60 seconds for large datasets
       });
       
-      // Ensure orders is always an array
-      const mtapiOrders = response.data?.orders || [];
-      if (!Array.isArray(mtapiOrders)) {
-        return [];
+      return this.processOrderHistoryResponse(response);
+    } catch (error: any) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        if (status === 401 || status === 403) {
+          throw new MTAPIError('Session expired or invalid', error);
+        }
+        throw new MTAPIError(
+          `OrderHistory failed: ${error.message}`,
+          error
+        );
       }
-      
-      // Normalize MTAPI order format to our database format
-      const normalizedOrders: Array<Order & { _raw?: MTAPIOrder }> = mtapiOrders.map((mtapiOrder: MTAPIOrder) => ({
-        order_id: mtapiOrder.ticket,
-        symbol: mtapiOrder.symbol || '',
-        type: mtapiOrder.orderType || mtapiOrder.dealType || '',
-        volume: mtapiOrder.lots || 0, // Use lots field, not volume (volume is in base units)
-        price_open: mtapiOrder.openPrice || 0,
-        price_close: mtapiOrder.closePrice,
-        profit: mtapiOrder.profit || 0,
-        swap: mtapiOrder.swap || 0,
-        commission: mtapiOrder.commission || 0,
-        time_open: mtapiOrder.openTime,
-        time_close: mtapiOrder.closeTime,
-        comment: mtapiOrder.comment || '',
-        _raw: mtapiOrder, // Attach original for raw_data storage
-      }));
-      
-      return normalizedOrders;
+      throw error;
+    }
+  }
+
+  /**
+   * Process order history response and normalize to our format
+   */
+  private processOrderHistoryResponse(response: any): Array<Order & { _raw?: MTAPIOrder }> {
+    // Ensure orders is always an array
+    const mtapiOrders = response.data?.orders || [];
+    if (!Array.isArray(mtapiOrders)) {
+      return [];
+    }
+    
+    // Normalize MTAPI order format to our database format
+    const normalizedOrders: Array<Order & { _raw?: MTAPIOrder }> = mtapiOrders.map((mtapiOrder: MTAPIOrder) => ({
+      order_id: mtapiOrder.ticket,
+      symbol: mtapiOrder.symbol || '',
+      type: mtapiOrder.orderType || mtapiOrder.dealType || '',
+      volume: mtapiOrder.lots || 0, // Use lots field, not volume (volume is in base units)
+      price_open: mtapiOrder.openPrice || 0,
+      price_close: mtapiOrder.closePrice,
+      profit: mtapiOrder.profit || 0,
+      swap: mtapiOrder.swap || 0,
+      commission: mtapiOrder.commission || 0,
+      time_open: mtapiOrder.openTime,
+      time_close: mtapiOrder.closeTime,
+      comment: mtapiOrder.comment || '',
+      _raw: mtapiOrder, // Attach original for raw_data storage
+    }));
+    
+    return normalizedOrders;
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
