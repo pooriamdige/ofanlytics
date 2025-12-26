@@ -1,4 +1,4 @@
-import * as dateFnsTz from 'date-fns-tz';
+import { utcToZonedTime, formatInTimeZone } from 'date-fns-tz';
 
 const TEHRAN_TIMEZONE = 'Asia/Tehran';
 const RESET_HOUR = 1;
@@ -6,16 +6,24 @@ const RESET_MINUTE = 30;
 
 /**
  * Get current date in Asia/Tehran timezone
+ * Note: utcToZonedTime converts a UTC date to the specified timezone
+ * For date-fns-tz v2.0.0, we use utcToZonedTime
  */
 export function getTehranDate(date: Date = new Date()): Date {
-  return dateFnsTz.toZonedTime(date, TEHRAN_TIMEZONE);
+  try {
+    return utcToZonedTime(date, TEHRAN_TIMEZONE);
+  } catch (error) {
+    console.error('Error in utcToZonedTime:', error);
+    // Fallback: return date as-is if timezone conversion fails
+    return date;
+  }
 }
 
 /**
  * Get current date string (YYYY-MM-DD) in Asia/Tehran timezone
  */
 export function getTehranDateString(date: Date = new Date()): string {
-  return dateFnsTz.formatInTimeZone(date, TEHRAN_TIMEZONE, 'yyyy-MM-dd');
+  return formatInTimeZone(date, TEHRAN_TIMEZONE, 'yyyy-MM-dd');
 }
 
 /**
