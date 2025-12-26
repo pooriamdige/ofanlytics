@@ -59,10 +59,10 @@ export async function calculateTradingStats(accountId: number): Promise<TradingS
   const bestTrade = profits.length > 0 ? Math.max(...profits) : 0;
   const worstTrade = profits.length > 0 ? Math.min(...profits) : 0;
 
-  // Trading days
+  // Trading days - count distinct dates in Asia/Tehran timezone
   const tradingDaysResult = await db('orders')
     .where({ account_id: accountId, is_demo_deposit: false })
-    .countDistinct(db.raw("DATE(time_open AT TIME ZONE 'Asia/Tehran') as days"))
+    .select(db.raw("COUNT(DISTINCT DATE(time_open AT TIME ZONE 'Asia/Tehran')) as days"))
     .first();
 
   const tradingDays = parseInt(tradingDaysResult?.days?.toString() || '0');
