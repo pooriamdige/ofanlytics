@@ -1,0 +1,282 @@
+import { db } from '../database/connection';
+import { MTAPIClient } from '../services/mtapi';
+import { computeAndStoreMetrics, getDailyStartEquity } from '../services/metrics';
+import { updateEquityPeak } from '../services/metrics';
+import {
+  calculateDrawdownMetrics,
+  shouldEnterLiveMonitoring,
+  shouldExitLiveMonitoring,
+  checkDailyViolation,
+  checkMaxViolation,
+} from '../utils/dd-calculator';
+import { isResetWindow, getTehranDateString } from '../utils/timezone';
+import { decrypt } from '../utils/encryption';
+import { WebSocketManager } from './ws-manager';
+
+const POLL_INTERVAL = 4 * 60 * 1000; // 4 minutes
+const MTAPI_BASE_URL = process.env.MTAPI_BASE_URL || '';
+const MTAPI_EVENTS_URL = process.env.MTAPI_EVENTS_URL || 'http://185.8.173.37:5000';
+
+const mtapiClient = new MTAPIClient(MTAPI_BASE_URL);
+const wsManager = new WebSocketManager(MTAPI_EVENTS_URL);
+
+/**
+ * Check session health
+ */
+function isSessionValid(account: any): boolean {
+  if (!account.session_id) return false;
+  if (!account.session_expires_at) return false;
+  if (new Date(account.session_expires_at) < new Date()) return false;
+  if (!account.session_last_validated) return false;
+  
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  if (new Date(account.session_last_validated) < oneHourAgo) return false;
+  
+  return true;
+}
+
+/**
+ * Process a single account
+ */
+async function processAccount(account: any): Promise<void> {
+  try {
+    let summary: any;
+    
+    // Check session health
+    if (!isSessionValid(account)) {
+      console.log(`Reconnecting account ${account.id}...`);
+      const password = decrypt(account.investor_password_encrypted);
+      const sessionId = await mtapiClient.withRetry(
+        () => mtapiClient.connectEx(account.login, password, account.server),
+        3,
+        1000
+      );
+
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      // Get account summary immediately to capture starting_equity if not set
+      summary = await mtapiClient.withRetry(
+        () => mtapiClient.accountSummary(sessionId),
+        2,
+        1000
+      );
+
+      // Capture starting_equity on first connection
+      const updates: any = {
+        session_id: sessionId,
+        session_expires_at: expiresAt,
+        session_last_validated: new Date(),
+        connection_state: 'connected',
+      };
+
+      if (!account.starting_equity && summary.equity) {
+        updates.starting_equity = summary.equity;
+      }
+
+      await db('accounts')
+        .where({ id: account.id })
+        .update(updates);
+
+      account.session_id = sessionId;
+      account.starting_equity = updates.starting_equity || account.starting_equity;
+    } else {
+      // Get account summary
+      summary = await mtapiClient.withRetry(
+        () => mtapiClient.accountSummary(account.session_id),
+        2,
+        1000
+      );
+    }
+
+    // Update last seen and session validation
+    await db('accounts')
+      .where({ id: account.id })
+      .update({
+        last_seen: new Date(),
+        session_last_validated: new Date(),
+      });
+
+    // Get order history (from last_seen or account creation)
+    const fromDate = account.last_seen || account.created_at;
+    const orders = await mtapiClient.withRetry(
+      () => mtapiClient.orderHistory(account.session_id, fromDate.toISOString()),
+      2,
+      1000
+    );
+
+    // Process orders
+    for (const order of orders) {
+      const isDemoDeposit = order.type === 'balance' && 
+                           order.profit > 0 && 
+                           (order.comment?.toLowerCase().includes('deposit') || 
+                            order.comment?.toLowerCase().includes('demo'));
+
+      await db('orders')
+        .insert({
+          account_id: account.id,
+          order_id: order.order_id,
+          symbol: order.symbol,
+          type: order.type,
+          volume: order.volume,
+          price_open: order.price_open,
+          price_close: order.price_close,
+          profit: order.profit,
+          swap: order.swap,
+          commission: order.commission,
+          time_open: new Date(order.time_open),
+          time_close: order.time_close ? new Date(order.time_close) : null,
+          is_demo_deposit: isDemoDeposit,
+          plan_id: account.plan_id,
+          raw_data: order,
+        })
+        .onConflict(['account_id', 'order_id'])
+        .merge();
+    }
+
+    // Check for daily reset (01:30 Asia/Tehran)
+    if (isResetWindow()) {
+      const today = getTehranDateString();
+      const existingSnapshot = await db('account_snapshots')
+        .where({ account_id: account.id, snapshot_date: today })
+        .first();
+
+      if (!existingSnapshot) {
+        await db('account_snapshots').insert({
+          account_id: account.id,
+          snapshot_date: today,
+          equity: summary.equity,
+          balance: summary.balance,
+          snapshot_time: new Date(),
+        });
+      }
+    }
+
+    // Compute metrics
+    await computeAndStoreMetrics(account.id);
+
+    // Get latest metrics for violation check
+    const latestMetrics = await db('account_metrics')
+      .where({ account_id: account.id })
+      .orderBy('computed_at', 'desc')
+      .first();
+
+    const plan = await db('plans').where({ id: account.plan_id }).first();
+
+    // Check violations
+    const dailyViolation = checkDailyViolation(
+      parseFloat(latestMetrics.current_equity?.toString() || '0'),
+      parseFloat(latestMetrics.daily_breach_equity?.toString() || '0')
+    );
+
+    const maxViolation = checkMaxViolation(
+      parseFloat(latestMetrics.current_equity?.toString() || '0'),
+      parseFloat(latestMetrics.max_breach_equity?.toString() || '0')
+    );
+
+    if (dailyViolation || maxViolation) {
+      await db('accounts')
+        .where({ id: account.id })
+        .update({
+          is_failed: true,
+          failure_reason: dailyViolation ? 'Daily DD violation' : 'Max DD violation',
+          monitoring_state: 'normal',
+        });
+
+      // Unsubscribe from live monitoring if active
+      if (wsManager.isSubscribed(account.id)) {
+        wsManager.unsubscribe(account.id);
+      }
+
+      console.log(`Account ${account.id} failed: ${dailyViolation ? 'Daily DD' : 'Max DD'} violation`);
+      return;
+    }
+
+    // Check state transitions
+    const dailyUsage = parseFloat(latestMetrics.daily_usage_percent_of_limit?.toString() || '0');
+    const maxUsage = parseFloat(latestMetrics.max_usage_percent_of_limit?.toString() || '0');
+
+    if (account.monitoring_state === 'normal') {
+      if (shouldEnterLiveMonitoring(dailyUsage, maxUsage)) {
+        await db('accounts')
+          .where({ id: account.id })
+          .update({ monitoring_state: 'live' });
+
+        // Subscribe to WebSocket events
+        await wsManager.subscribe(account.id, account.login, account.server, account.session_id);
+        console.log(`Account ${account.id} entered live monitoring`);
+      }
+    } else if (account.monitoring_state === 'live') {
+      if (shouldExitLiveMonitoring(dailyUsage, maxUsage)) {
+        await db('accounts')
+          .where({ id: account.id })
+          .update({ monitoring_state: 'normal' });
+
+        // Unsubscribe from WebSocket events
+        wsManager.unsubscribe(account.id);
+        console.log(`Account ${account.id} exited live monitoring`);
+      }
+    }
+
+  } catch (error: any) {
+    console.error(`Error processing account ${account.id}:`, error.message);
+    
+    // Mark connection as error if it's a session issue
+    if (error.message?.includes('Session expired') || error.message?.includes('401') || error.message?.includes('403')) {
+      await db('accounts')
+        .where({ id: account.id })
+        .update({
+          connection_state: 'error',
+          session_id: null,
+        });
+    }
+  }
+}
+
+/**
+ * Main poll loop
+ */
+async function pollLoop(): Promise<void> {
+  try {
+    console.log('Starting poll cycle...');
+
+    // Get all active accounts
+    const accounts = await db('accounts')
+      .where({ is_failed: false })
+      .whereIn('connection_state', ['connected', 'disconnected', 'error']);
+
+    console.log(`Processing ${accounts.length} accounts...`);
+
+    // Process accounts in parallel (with concurrency limit)
+    const concurrency = 5;
+    for (let i = 0; i < accounts.length; i += concurrency) {
+      const batch = accounts.slice(i, i + concurrency);
+      await Promise.all(batch.map(processAccount));
+    }
+
+    console.log('Poll cycle completed');
+  } catch (error) {
+    console.error('Poll cycle error:', error);
+  }
+}
+
+/**
+ * Start poll worker
+ */
+function startPollWorker(): void {
+  console.log('Starting poll worker...');
+  console.log(`Poll interval: ${POLL_INTERVAL / 1000} seconds`);
+
+  // Run immediately
+  pollLoop();
+
+  // Then run on interval
+  setInterval(pollLoop, POLL_INTERVAL);
+}
+
+// Start if run directly
+if (require.main === module) {
+  startPollWorker();
+}
+
+export { startPollWorker };
+
