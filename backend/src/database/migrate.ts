@@ -5,6 +5,7 @@ import * as migration003 from './migrations/003_create_account_snapshots';
 import * as migration004 from './migrations/004_create_equity_peaks';
 import * as migration005 from './migrations/005_create_orders';
 import * as migration006 from './migrations/006_create_account_metrics';
+import * as migration007 from './migrations/007_add_last_orders_fetched_at';
 
 async function runMigrations() {
   try {
@@ -39,6 +40,9 @@ async function runMigrations() {
     
     await migration006.up(db);
     console.log('✓ Created account_metrics table');
+    
+    await migration007.up(db);
+    console.log('✓ Added last_orders_fetched_at to accounts table');
     
     console.log('All migrations completed successfully!');
     process.exit(0);

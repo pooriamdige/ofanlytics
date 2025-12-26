@@ -1,4 +1,4 @@
-import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import * as dateFnsTz from 'date-fns-tz';
 
 const TEHRAN_TIMEZONE = 'Asia/Tehran';
 const RESET_HOUR = 1;
@@ -8,14 +8,14 @@ const RESET_MINUTE = 30;
  * Get current date in Asia/Tehran timezone
  */
 export function getTehranDate(date: Date = new Date()): Date {
-  return toZonedTime(date, TEHRAN_TIMEZONE);
+  return dateFnsTz.toZonedTime(date, TEHRAN_TIMEZONE);
 }
 
 /**
  * Get current date string (YYYY-MM-DD) in Asia/Tehran timezone
  */
 export function getTehranDateString(date: Date = new Date()): string {
-  return formatInTimeZone(date, TEHRAN_TIMEZONE, 'yyyy-MM-dd');
+  return dateFnsTz.formatInTimeZone(date, TEHRAN_TIMEZONE, 'yyyy-MM-dd');
 }
 
 /**

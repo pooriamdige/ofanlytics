@@ -116,15 +116,32 @@ async function processAccount(account: any): Promise<void> {
         session_last_validated: new Date(),
       });
 
-    // Get order history (from last_seen or account creation)
-    const fromDate = account.last_seen || account.created_at;
+    // Determine date range for order history
+    // First time: Get orders from start of 2025 or account creation (whichever is later)
+    // Subsequent: Get orders from last fetch time or latest order time
+    let fromDate: Date;
+    
+    if (!account.last_orders_fetched_at) {
+      // First time fetching orders - get from start of 2025 or account creation
+      const startOf2025 = new Date('2025-01-01T00:00:00Z');
+      const accountCreated = account.created_at ? new Date(account.created_at) : startOf2025;
+      fromDate = accountCreated > startOf2025 ? accountCreated : startOf2025;
+    } else {
+      // Subsequent fetches - get from last fetch time
+      fromDate = new Date(account.last_orders_fetched_at);
+    }
+
+    // Get order history
     const orders = await mtapiClient.withRetry(
       () => mtapiClient.orderHistory(account.session_id, fromDate.toISOString()),
       2,
       1000
     );
 
+    console.log(`Account ${account.id}: Fetched ${orders.length} orders from ${fromDate.toISOString()}`);
+
     // Process orders
+    let ordersProcessed = 0;
     for (const order of orders) {
       const isDemoDeposit = order.type === 'balance' && 
                            order.profit > 0 && 
@@ -151,6 +168,19 @@ async function processAccount(account: any): Promise<void> {
         })
         .onConflict(['account_id', 'order_id'])
         .merge();
+      
+      ordersProcessed++;
+    }
+
+    // Update last_orders_fetched_at to current time
+    await db('accounts')
+      .where({ id: account.id })
+      .update({
+        last_orders_fetched_at: new Date(),
+      });
+
+    if (ordersProcessed > 0) {
+      console.log(`Account ${account.id}: Processed ${ordersProcessed} orders`);
     }
 
     // Check for daily reset (01:30 Asia/Tehran)
