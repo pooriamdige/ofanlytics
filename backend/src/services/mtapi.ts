@@ -271,19 +271,6 @@ export class MTAPIClient {
     }));
     
     return normalizedOrders;
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        if (status === 401 || status === 403) {
-          throw new MTAPIError('Session expired or invalid', error);
-        }
-        throw new MTAPIError(
-          `OrderHistory failed: ${error.message}`,
-          error
-        );
-      }
-      throw error;
-    }
   }
 
   /**
