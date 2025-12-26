@@ -22,27 +22,57 @@ async function runMigrations() {
       });
     }
     
-    // Run migrations in order
-    await migration001.up(db);
-    console.log('✓ Created plans table');
+    // Run migrations in order (check if table exists first)
+    if (!(await db.schema.hasTable('plans'))) {
+      await migration001.up(db);
+      console.log('✓ Created plans table');
+    } else {
+      console.log('✓ plans table already exists, skipping');
+    }
     
-    await migration002.up(db);
-    console.log('✓ Created accounts table');
+    if (!(await db.schema.hasTable('accounts'))) {
+      await migration002.up(db);
+      console.log('✓ Created accounts table');
+    } else {
+      console.log('✓ accounts table already exists, skipping');
+    }
     
-    await migration003.up(db);
-    console.log('✓ Created account_snapshots table');
+    if (!(await db.schema.hasTable('account_snapshots'))) {
+      await migration003.up(db);
+      console.log('✓ Created account_snapshots table');
+    } else {
+      console.log('✓ account_snapshots table already exists, skipping');
+    }
     
-    await migration004.up(db);
-    console.log('✓ Created equity_peaks table');
+    if (!(await db.schema.hasTable('equity_peaks'))) {
+      await migration004.up(db);
+      console.log('✓ Created equity_peaks table');
+    } else {
+      console.log('✓ equity_peaks table already exists, skipping');
+    }
     
-    await migration005.up(db);
-    console.log('✓ Created orders table');
+    if (!(await db.schema.hasTable('orders'))) {
+      await migration005.up(db);
+      console.log('✓ Created orders table');
+    } else {
+      console.log('✓ orders table already exists, skipping');
+    }
     
-    await migration006.up(db);
-    console.log('✓ Created account_metrics table');
+    if (!(await db.schema.hasTable('account_metrics'))) {
+      await migration006.up(db);
+      console.log('✓ Created account_metrics table');
+    } else {
+      console.log('✓ account_metrics table already exists, skipping');
+    }
     
-    await migration007.up(db);
-    console.log('✓ Added last_orders_fetched_at to accounts table');
+    // Migration 007 adds a column, check if it exists
+    const hasLastOrdersFetchedAt = await db.schema.hasColumn('accounts', 'last_orders_fetched_at');
+    if (!hasLastOrdersFetchedAt) {
+      await migration007.up(db);
+      console.log('✓ Added last_orders_fetched_at to accounts table');
+    } else {
+      console.log('✓ last_orders_fetched_at column already exists, skipping');
+    }
     
     console.log('All migrations completed successfully!');
     process.exit(0);
