@@ -10,6 +10,7 @@ import {
   checkMaxViolation,
 } from '../utils/dd-calculator';
 import { isResetWindow, getTehranDateString } from '../utils/timezone';
+import { zonedTimeToUtc } from 'date-fns-tz';
 import { decrypt } from '../utils/encryption';
 import { WebSocketManager } from './ws-manager';
 
@@ -117,22 +118,45 @@ async function processAccount(account: any): Promise<void> {
       });
 
     // Determine date range for order history
-    // First time: Get orders from start of 2025 or account creation (whichever is later)
-    // Subsequent: Get orders from last fetch time or latest order time
+    // Strategy: Use latest order time from database (most reliable)
+    // If no orders exist, use June 1, 2025 in broker timezone
     let fromDate: Date;
     
-    if (!account.last_orders_fetched_at) {
-      // First time fetching orders - get from June 1, 2025 or account creation (whichever is later)
-      const startOfJune2025 = new Date('2025-06-01T00:00:00Z');
-      const accountCreated = account.created_at ? new Date(account.created_at) : startOfJune2025;
-      fromDate = accountCreated > startOfJune2025 ? accountCreated : startOfJune2025;
+    // Get the latest order time from database (most recent time_close or time_open)
+    const latestOrder = await db('orders')
+      .where({ account_id: account.id })
+      .whereNotNull('time_close')
+      .orderBy('time_close', 'desc')
+      .first();
+    
+    if (latestOrder && latestOrder.time_close) {
+      // Use latest order's close time as starting point
+      // Add 1 second to avoid fetching the same order again
+      fromDate = new Date(new Date(latestOrder.time_close).getTime() + 1000);
+      console.log(`Account ${account.id}: Using latest order time: ${latestOrder.time_close}`);
     } else {
-      // Subsequent fetches - get from last fetch time
-      fromDate = new Date(account.last_orders_fetched_at);
+      // First time fetching orders - get from June 1, 2025 00:00:00 in broker timezone
+      // Get broker timezone from MTAPI client (defaults to Europe/Istanbul UTC+2)
+      const brokerTimezone = process.env.BROKER_TIMEZONE || 'Europe/Istanbul';
+      
+      // Create June 1, 2025 00:00:00 in broker timezone, convert to UTC Date object
+      // This ensures when we format it for the API, it shows as June 1, 2025 00:00:00 in broker time
+      const june1BrokerTime = '2025-06-01T00:00:00';
+      const startOfJune2025UTC = zonedTimeToUtc(june1BrokerTime, brokerTimezone);
+      
+      const accountCreated = account.created_at ? new Date(account.created_at) : null;
+      
+      if (accountCreated && accountCreated > startOfJune2025UTC) {
+        fromDate = accountCreated;
+        console.log(`Account ${account.id}: First time fetch, using account creation date: ${fromDate.toISOString()}`);
+      } else {
+        fromDate = startOfJune2025UTC;
+        console.log(`Account ${account.id}: First time fetch, using June 1, 2025 00:00:00 ${brokerTimezone}: ${fromDate.toISOString()}`);
+      }
     }
 
     // Get order history (to date is current time)
-    // Note: Dates will be converted to broker timezone inside orderHistory
+    // Note: Dates will be converted to broker timezone inside orderHistory when sending to API
     const toDate = new Date();
     const orders = await mtapiClient.withRetry(
       () => mtapiClient.orderHistory(account.session_id, fromDate, toDate),
@@ -178,7 +202,7 @@ async function processAccount(account: any): Promise<void> {
       ordersProcessed++;
     }
 
-    // Update last_orders_fetched_at to current time
+    // Update last_orders_fetched_at to current time (for reference, but we use latest order time for next fetch)
     await db('accounts')
       .where({ id: account.id })
       .update({
