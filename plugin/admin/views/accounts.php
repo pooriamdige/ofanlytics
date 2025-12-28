@@ -61,6 +61,9 @@ if (isset($_POST['action'])) {
                     $error .= ' (and ' . (count($sync_result['errors']) - 5) . ' more)';
                 }
             }
+            if (isset($sync_result['removed_from_local']) && $sync_result['removed_from_local'] > 0) {
+                $success .= ' (Removed ' . $sync_result['removed_from_local'] . ' from local cache)';
+            }
         } else {
             $error = $sync_result['message'];
         }
@@ -78,27 +81,31 @@ if (isset($_POST['action'])) {
 $plans_result = $api_client->get_plans();
 $plans = isset($plans_result['plans']) ? $plans_result['plans'] : array();
 
-// Get accounts from local cache first
+// Get accounts from local cache (synced from WooCommerce orders)
 $table_accounts = $wpdb->prefix . 'onefunders_accounts';
 $local_accounts = $wpdb->get_results("SELECT * FROM $table_accounts ORDER BY id DESC", ARRAY_A);
 
-// Try to get accounts from backend API and merge/update
+// Get accounts from backend API to merge status/state information
 $all_accounts_from_backend = array();
 $user_ids = array();
+
+// Collect user IDs from local cache
 if (!empty($local_accounts)) {
     $user_ids = array_unique(array_column($local_accounts, 'wp_user_id'));
-} else {
-    // If no local accounts, try to get from all WooCommerce orders
-    if (class_exists('WooCommerce')) {
-        $orders = wc_get_orders(array(
-            'status' => 'completed',
-            'limit' => -1,
-        ));
-        foreach ($orders as $order) {
-            $user_id = $order->get_user_id();
-            if ($user_id && !in_array($user_id, $user_ids)) {
-                $user_ids[] = $user_id;
-            }
+}
+
+// Also check WooCommerce orders for any accounts we might have missed
+if (class_exists('WooCommerce') && empty($local_accounts)) {
+    $orders = wc_get_orders(array(
+        'limit' => -1,
+        'status' => 'any',
+    ));
+    foreach ($orders as $order) {
+        $user_id = $order->get_user_id();
+        $login = $order->get_meta('_onefunders_login');
+        $server = $order->get_meta('_onefunders_server');
+        if ($user_id && $login && $server && !in_array($user_id, $user_ids)) {
+            $user_ids[] = $user_id;
         }
     }
 }
@@ -112,8 +119,65 @@ foreach ($user_ids as $user_id) {
     }
 }
 
-// Use backend accounts if available, otherwise use local cache
-$accounts = !empty($all_accounts_from_backend) ? $all_accounts_from_backend : $local_accounts;
+// Merge local cache with backend data
+// Use local cache as base (source of truth from WooCommerce), enrich with backend status
+$accounts = array();
+$backend_accounts_by_key = array();
+foreach ($all_accounts_from_backend as $backend_account) {
+    $key = ($backend_account['login'] ?? '') . '|' . ($backend_account['server'] ?? '');
+    $backend_accounts_by_key[$key] = $backend_account;
+}
+
+foreach ($local_accounts as $local_account) {
+    $key = $local_account['login'] . '|' . $local_account['server'];
+    if (isset($backend_accounts_by_key[$key])) {
+        // Merge: use local cache data but enrich with backend status/state
+        $merged = array_merge($local_account, $backend_accounts_by_key[$key]);
+        $merged['id'] = $backend_accounts_by_key[$key]['id']; // Use backend ID
+        $accounts[] = $merged;
+    } else {
+        // Account exists in local cache but not in backend - show it anyway
+        $accounts[] = $local_account;
+    }
+}
+
+// If no accounts found, show message
+if (empty($accounts) && empty($local_accounts)) {
+    // Try to show accounts from WooCommerce orders directly
+    if (class_exists('WooCommerce')) {
+        $orders = wc_get_orders(array(
+            'limit' => -1,
+            'status' => 'any',
+        ));
+        $accounts_from_orders = array();
+        foreach ($orders as $order) {
+            $login = $order->get_meta('_onefunders_login');
+            $server = $order->get_meta('_onefunders_server');
+            $account_type = $order->get_meta('_onefunders_account_type');
+            $investor_password = $order->get_meta('_onefunders_investor_password');
+            
+            if ($login && $server && $account_type && $investor_password) {
+                $key = $login . '|' . $server;
+                if (!isset($accounts_from_orders[$key])) {
+                    $accounts_from_orders[$key] = array(
+                        'id' => null,
+                        'wp_user_id' => $order->get_user_id(),
+                        'login' => $login,
+                        'server' => $server,
+                        'plan_id' => null,
+                        'is_failed' => false,
+                        'connection_state' => 'not_synced',
+                        'monitoring_state' => 'normal',
+                        'last_seen' => null,
+                    );
+                }
+            }
+        }
+        if (!empty($accounts_from_orders)) {
+            $accounts = array_values($accounts_from_orders);
+        }
+    }
+}
 ?>
 
 <div class="wrap">
