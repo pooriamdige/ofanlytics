@@ -132,6 +132,7 @@ async function processAccount(account: any): Promise<void> {
     }
 
     // Get order history (to date is current time)
+    // Note: Dates will be converted to broker timezone inside orderHistory
     const toDate = new Date();
     const orders = await mtapiClient.withRetry(
       () => mtapiClient.orderHistory(account.session_id, fromDate, toDate),
@@ -139,7 +140,8 @@ async function processAccount(account: any): Promise<void> {
       1000
     );
 
-    console.log(`Account ${account.id}: Fetched ${orders.length} orders from ${fromDate.toISOString()} to ${toDate.toISOString()}`);
+    // Log in UTC for reference, but actual API calls use broker timezone
+    console.log(`Account ${account.id}: Fetched ${orders.length} orders (UTC: ${fromDate.toISOString()} to ${toDate.toISOString()})`);
 
     // Process orders
     let ordersProcessed = 0;

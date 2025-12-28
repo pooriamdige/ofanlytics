@@ -176,7 +176,16 @@ export class MTAPIClient {
   private formatMT5Date(date: Date | string): string {
     const d = typeof date === 'string' ? new Date(date) : date;
     // Format in broker timezone (not UTC)
-    return formatInTimeZone(d, this.brokerTimezone, 'yyyy-MM-dd\'T\'HH:mm:ss');
+    const formatted = formatInTimeZone(d, this.brokerTimezone, 'yyyy-MM-dd\'T\'HH:mm:ss');
+    
+    // Debug logging to verify timezone conversion
+    const utcStr = d.toISOString().replace(/\.\d{3}Z$/, '');
+    if (formatted !== utcStr.replace('Z', '')) {
+      // Only log if there's a difference (timezone conversion happened)
+      console.log(`Timezone conversion: UTC ${utcStr} -> Broker (${this.brokerTimezone}) ${formatted}`);
+    }
+    
+    return formatted;
   }
 
   /**
@@ -189,11 +198,14 @@ export class MTAPIClient {
     to: Date | string = new Date()
   ): Promise<Array<Order & { _raw?: MTAPIOrder }>> {
     try {
-      // Format dates in MT5 format: yyyy-MM-ddTHH:mm:ss
+      // Format dates in MT5 format: yyyy-MM-ddTHH:mm:ss (in broker timezone)
       const fromFormatted = this.formatMT5Date(from);
       const toFormatted = this.formatMT5Date(to);
       
-      // Ensure from is before to
+      // Log what we're sending (in broker timezone)
+      console.log(`OrderHistory: Requesting orders from ${fromFormatted} to ${toFormatted} (broker timezone: ${this.brokerTimezone})`);
+      
+      // Ensure from is before to (compare in UTC)
       const fromDate = typeof from === 'string' ? new Date(from) : from;
       const toDate = typeof to === 'string' ? new Date(to) : to;
       
