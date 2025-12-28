@@ -58,6 +58,18 @@ class OneFunders_Analytics {
         if (!get_option('onefunders_analytics_api_url')) {
             update_option('onefunders_analytics_api_url', 'http://localhost:3000');
         }
+        
+        // Sync all accounts from WooCommerce orders on first activation
+        if (class_exists('WooCommerce')) {
+            $woocommerce = new OneFunders_Analytics_WooCommerce();
+            $sync_result = $woocommerce->sync_all_accounts_from_orders();
+            
+            if ($sync_result['success']) {
+                error_log('OneFunders: Plugin activation - Synced ' . $sync_result['synced'] . ' account(s) from WooCommerce orders');
+            } else {
+                error_log('OneFunders: Plugin activation - Sync failed: ' . $sync_result['message']);
+            }
+        }
     }
     
     public function deactivate() {

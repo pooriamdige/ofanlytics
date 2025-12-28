@@ -10,6 +10,7 @@ import {
   checkMaxViolation,
 } from '../utils/dd-calculator';
 import { isResetWindow, getTehranDateString } from '../utils/timezone';
+import { formatInTimeZone } from 'date-fns-tz';
 import { zonedTimeToUtc } from 'date-fns-tz';
 import { decrypt } from '../utils/encryption';
 import { WebSocketManager } from './ws-manager';
@@ -213,6 +214,24 @@ async function processAccount(account: any): Promise<void> {
       console.log(`Account ${account.id}: Processed ${ordersProcessed} orders`);
     }
 
+    // Update balance in latest account_metrics from AccountSummary
+    // Balance is display-only but should reflect current state from MT5
+    if (summary.balance !== undefined) {
+      const latestMetricsId = await db('account_metrics')
+        .where({ account_id: account.id })
+        .orderBy('computed_at', 'desc')
+        .select('id')
+        .first();
+
+      if (latestMetricsId) {
+        await db('account_metrics')
+          .where({ id: latestMetricsId.id })
+          .update({
+            current_balance: summary.balance,
+          });
+      }
+    }
+
     // Check for daily reset (01:30 Asia/Tehran)
     if (isResetWindow()) {
       const today = getTehranDateString();
@@ -254,11 +273,21 @@ async function processAccount(account: any): Promise<void> {
     );
 
     if (dailyViolation || maxViolation) {
+      // Format failure reason in Persian with date/time
+      const now = new Date();
+      const brokerTimezone = process.env.BROKER_TIMEZONE || 'Europe/Istanbul';
+      const dateStr = formatInTimeZone(now, brokerTimezone, 'yyyy-MM-dd');
+      const timeStr = formatInTimeZone(now, brokerTimezone, 'HH:mm:ss');
+      
+      const failureReason = dailyViolation 
+        ? `حد مجاز ضرر روزانه در تاریخ ${dateStr} | ساعت ${timeStr} رد شد`
+        : `حد مجاز ضرر کل در تاریخ ${dateStr} | ساعت ${timeStr} رد شد`;
+      
       await db('accounts')
         .where({ id: account.id })
         .update({
           is_failed: true,
-          failure_reason: dailyViolation ? 'Daily DD violation' : 'Max DD violation',
+          failure_reason: failureReason,
           monitoring_state: 'normal',
         });
 

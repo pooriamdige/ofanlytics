@@ -6,6 +6,7 @@ import {
   shouldExitLiveMonitoring,
 } from '../utils/dd-calculator';
 import { WebSocketManager } from './ws-manager';
+import { formatInTimeZone } from 'date-fns-tz';
 
 const MTAPI_EVENTS_URL = process.env.MTAPI_EVENTS_URL || 'http://185.8.173.37:5000';
 
@@ -36,12 +37,22 @@ async function handleOrderProfit(accountId: number, event: any): Promise<void> {
     const maxViolation = checkMaxViolation(currentEquity, maxBreachEquity);
 
     if (dailyViolation || maxViolation) {
+      // Format failure reason in Persian with date/time
+      const now = new Date();
+      const brokerTimezone = process.env.BROKER_TIMEZONE || 'Europe/Istanbul';
+      const dateStr = formatInTimeZone(now, brokerTimezone, 'yyyy-MM-dd');
+      const timeStr = formatInTimeZone(now, brokerTimezone, 'HH:mm:ss');
+      
+      const failureReason = dailyViolation 
+        ? `حد مجاز ضرر روزانه در تاریخ ${dateStr} | ساعت ${timeStr} رد شد`
+        : `حد مجاز ضرر کل در تاریخ ${dateStr} | ساعت ${timeStr} رد شد`;
+      
       // Mark account as failed immediately
       await db('accounts')
         .where({ id: accountId })
         .update({
           is_failed: true,
-          failure_reason: dailyViolation ? 'Daily DD violation (live)' : 'Max DD violation (live)',
+          failure_reason: failureReason,
           monitoring_state: 'normal',
         });
 
@@ -105,12 +116,22 @@ async function handleEquityUpdate(accountId: number, event: any): Promise<void> 
     const maxViolation = checkMaxViolation(currentEquity, maxBreachEquity);
 
     if (dailyViolation || maxViolation) {
+      // Format failure reason in Persian with date/time
+      const now = new Date();
+      const brokerTimezone = process.env.BROKER_TIMEZONE || 'Europe/Istanbul';
+      const dateStr = formatInTimeZone(now, brokerTimezone, 'yyyy-MM-dd');
+      const timeStr = formatInTimeZone(now, brokerTimezone, 'HH:mm:ss');
+      
+      const failureReason = dailyViolation 
+        ? `حد مجاز ضرر روزانه در تاریخ ${dateStr} | ساعت ${timeStr} رد شد`
+        : `حد مجاز ضرر کل در تاریخ ${dateStr} | ساعت ${timeStr} رد شد`;
+      
       // Mark account as failed immediately
       await db('accounts')
         .where({ id: accountId })
         .update({
           is_failed: true,
-          failure_reason: dailyViolation ? 'Daily DD violation (live)' : 'Max DD violation (live)',
+          failure_reason: failureReason,
           monitoring_state: 'normal',
         });
 

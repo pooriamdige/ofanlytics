@@ -16,27 +16,34 @@ class OneFunders_Analytics_WooCommerce {
         
         // Check if WooCommerce is active
         if (class_exists('WooCommerce')) {
-            add_action('woocommerce_order_status_completed', array($this, 'handle_order_completed'), 10, 1);
+            // Sync on order completion
+            add_action('woocommerce_order_status_completed', array($this, 'handle_order_update'), 10, 1);
+            // Sync on order update (status change, meta update, etc.)
+            add_action('woocommerce_update_order', array($this, 'handle_order_update'), 10, 1);
+            // Sync on order meta update
+            add_action('woocommerce_order_item_meta_updated', array($this, 'handle_order_update'), 10, 1);
         }
     }
     
     /**
-     * Handle WooCommerce order completion
+     * Handle WooCommerce order update (completion, status change, meta update)
      */
-    public function handle_order_completed($order_id) {
+    public function handle_order_update($order_id) {
         $order = wc_get_order($order_id);
         if (!$order) {
             return;
         }
         
         // Get account details from order meta
+        // Only sync if ALL required fields exist: account_type, login, investor_password, server
         $login = $order->get_meta('_onefunders_login');
         $server = $order->get_meta('_onefunders_server');
         $investor_password = $order->get_meta('_onefunders_investor_password');
         $account_type = $order->get_meta('_onefunders_account_type');
         
-        if (!$login || !$server || !$investor_password) {
-            // Missing required fields
+        // All fields must exist for sync
+        if (!$login || !$server || !$investor_password || !$account_type) {
+            // Missing required fields - skip sync
             return;
         }
         
@@ -116,6 +123,7 @@ class OneFunders_Analytics_WooCommerce {
         $errors = array();
         
         // Get all completed orders with account meta
+        // Only sync orders that have ALL required fields: account_type, login, investor_password, server
         $orders = wc_get_orders(array(
             'status' => 'completed',
             'limit' => -1,
@@ -133,6 +141,10 @@ class OneFunders_Analytics_WooCommerce {
                     'key' => '_onefunders_investor_password',
                     'compare' => 'EXISTS',
                 ),
+                array(
+                    'key' => '_onefunders_account_type',
+                    'compare' => 'EXISTS',
+                ),
             ),
         ));
         
@@ -142,7 +154,8 @@ class OneFunders_Analytics_WooCommerce {
             $investor_password = $order->get_meta('_onefunders_investor_password');
             $account_type = $order->get_meta('_onefunders_account_type');
             
-            if (!$login || !$server || !$investor_password) {
+            // All fields must exist for sync
+            if (!$login || !$server || !$investor_password || !$account_type) {
                 continue;
             }
             
