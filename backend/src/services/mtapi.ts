@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { MTAPIError } from '../utils/errors';
+import { formatInTimeZone } from 'date-fns-tz';
 
 export interface ConnectExResponse {
   session_id: string;
@@ -67,9 +68,14 @@ export interface Order {
 export class MTAPIClient {
   private client: AxiosInstance;
   private baseURL: string;
+  private brokerTimezone: string;
 
-  constructor(baseURL: string) {
+  constructor(baseURL: string, brokerTimezone?: string) {
     this.baseURL = baseURL;
+    // Broker timezone - default to UTC+2 (Europe/Istanbul or similar)
+    // Can be overridden via BROKER_TIMEZONE env var or parameter
+    // Common options: 'Europe/Istanbul' (UTC+2), 'Asia/Tehran' (UTC+3:30), 'UTC' (UTC+0)
+    this.brokerTimezone = brokerTimezone || process.env.BROKER_TIMEZONE || 'Europe/Istanbul';
     this.client = axios.create({
       baseURL,
       timeout: 30000, // 30 seconds default
@@ -165,16 +171,12 @@ export class MTAPIClient {
 
   /**
    * Format date to MT5 API format: yyyy-MM-ddTHH:mm:ss (no milliseconds, no timezone)
+   * Uses broker timezone instead of UTC
    */
   private formatMT5Date(date: Date | string): string {
     const d = typeof date === 'string' ? new Date(date) : date;
-    const year = d.getUTCFullYear();
-    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    const hours = String(d.getUTCHours()).padStart(2, '0');
-    const minutes = String(d.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(d.getUTCSeconds()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    // Format in broker timezone (not UTC)
+    return formatInTimeZone(d, this.brokerTimezone, 'yyyy-MM-dd\'T\'HH:mm:ss');
   }
 
   /**
