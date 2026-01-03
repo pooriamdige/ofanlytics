@@ -20,7 +20,7 @@ class OneFunders_Analytics_API_Client {
         
         $args = array(
             'method' => $method,
-            'timeout' => 30,
+            'timeout' => 120, // 120 seconds - MT5 API connection can be slow
             'headers' => array(
                 'Content-Type' => 'application/json',
             ),

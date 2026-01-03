@@ -31,12 +31,16 @@ router.post('/connect', async (req: Request, res: Response) => {
     // Connect to MT5 API
     let hash: string;
     try {
+      console.log(`Connecting to MT5 API for login: ${login}, server: ${server}`);
       hash = await mt5Client.connectEx(login, investor_password, server);
+      console.log(`Successfully connected, got hash: ${hash.substring(0, 20)}...`);
     } catch (error: any) {
+      console.error(`MT5 API connection failed for login ${login}:`, error.message);
       return res.status(400).json({
         error: {
           code: 'CONNECTION_FAILED',
           message: error.message || 'Failed to connect to MT5 API',
+          details: error.response?.data || 'No additional details',
         },
       });
     }
@@ -47,7 +51,9 @@ router.post('/connect', async (req: Request, res: Response) => {
     
     let initialBalance = 0;
     try {
+      console.log(`Fetching order history for hash: ${hash.substring(0, 20)}...`);
       const orderHistory = await mt5Client.orderHistoryPagination(hash, fromDate, toDate, 2, 0);
+      console.log(`Got ${orderHistory.orders?.length || 0} orders`);
       
       // Sum all demo deposits
       for (const order of orderHistory.orders || []) {
@@ -55,8 +61,10 @@ router.post('/connect', async (req: Request, res: Response) => {
             order.comment?.toLowerCase().includes('demo deposit') &&
             order.profit > 0) {
           initialBalance += order.profit;
+          console.log(`Found demo deposit: ${order.profit}`);
         }
       }
+      console.log(`Total initial balance: ${initialBalance}`);
     } catch (error: any) {
       // If we can't get orders, still proceed but initialBalance will be 0
       console.warn(`Failed to get initial balance for account ${login}:`, error.message);

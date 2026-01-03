@@ -77,7 +77,7 @@ export class MT5APIClient {
     // Store baseURL in client instance
     this.client = axios.create({
       baseURL,
-      timeout: 60000, // 60 seconds
+      timeout: 120000, // 120 seconds - MT5 API can be slow
     });
   }
 
@@ -95,7 +95,7 @@ export class MT5APIClient {
           connectTimeoutSeconds: 60,
           connectTimeoutClusterMemberSeconds: 20,
         },
-        timeout: 30000,
+        timeout: 90000, // 90 seconds - MT5 connection can be slow
         responseType: 'text',
       });
 
