@@ -1,11 +1,8 @@
 import { db } from '../database/connection';
-import { MT5APIClient } from '../services/mt5-api';
 import WebSocket from 'ws';
 import { formatInTimeZone } from 'date-fns-tz';
 
-const MT5_API_URL = process.env.MT5_API_URL || 'http://188.213.198.109:5000';
 const MT5_WS_URL = process.env.MT5_WS_URL || 'ws://188.213.198.109:5000';
-// mt5Client not used in this file, removed
 
 interface WebSocketMessage {
   type: string;

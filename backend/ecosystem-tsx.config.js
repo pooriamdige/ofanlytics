@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'onefunders-backend',
-      script: 'tsx',
-      args: 'src/server.ts',
+      script: 'npx',
+      args: 'tsx src/server.ts',
       cwd: '/opt/onefunders/app/backend',
       instances: 1,
       exec_mode: 'fork',
