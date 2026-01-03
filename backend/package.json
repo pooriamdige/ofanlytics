@@ -7,10 +7,12 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "start:tsx": "tsx src/server.ts",
     "migrate": "tsx src/database/migrate.ts",
     "worker:poll": "tsx src/workers/poll-worker.ts",
     "worker:live": "tsx src/workers/live-monitor.ts",
-    "worker:cleanup": "tsx src/workers/cleanup-worker.ts"
+    "worker:cleanup": "tsx src/workers/cleanup-worker.ts",
+    "postinstall": "npm run build"
   },
   "keywords": [],
   "author": "",

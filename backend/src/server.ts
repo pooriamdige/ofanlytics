@@ -49,9 +49,24 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   
-  // Start background workers
-  startRuleCheckerWorker();
-  startDailyResetWorker();
+  // Start background workers asynchronously (don't block server startup)
+  // Wrap in try-catch to prevent server crash if workers fail
+  setTimeout(() => {
+    try {
+      console.log('Starting background workers...');
+      startRuleCheckerWorker();
+    } catch (error) {
+      console.error('Failed to start rule checker worker:', error);
+    }
+  }, 2000); // Wait 2 seconds for server to be fully ready
+  
+  setTimeout(() => {
+    try {
+      startDailyResetWorker();
+    } catch (error) {
+      console.error('Failed to start daily reset worker:', error);
+    }
+  }, 3000); // Wait 3 seconds for server to be fully ready
 });
 
 export default app;

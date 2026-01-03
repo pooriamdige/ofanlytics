@@ -91,19 +91,26 @@ function scheduleNextReset(): void {
 export function startDailyResetWorker(): void {
   console.log('Starting daily reset worker...');
 
-  // Perform initial reset if needed (check if we're past reset time today)
-  const now = new Date();
-  const nextReset = getNextResetTime();
-  
-  // If next reset is more than 23 hours away, we just passed reset time, so run it now
-  const hoursUntilReset = (nextReset.getTime() - now.getTime()) / (1000 * 60 * 60);
-  if (hoursUntilReset > 23) {
-    console.log('Reset time has passed today, performing reset now...');
-    performDailyReset().then(() => {
+  try {
+    // Perform initial reset if needed (check if we're past reset time today)
+    const now = new Date();
+    const nextReset = getNextResetTime();
+    
+    // If next reset is more than 23 hours away, we just passed reset time, so run it now
+    const hoursUntilReset = (nextReset.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (hoursUntilReset > 23) {
+      console.log('Reset time has passed today, performing reset now...');
+      performDailyReset().then(() => {
+        scheduleNextReset();
+      }).catch((error) => {
+        console.error('Error performing daily reset:', error);
+        scheduleNextReset(); // Still schedule next reset even if this one failed
+      });
+    } else {
       scheduleNextReset();
-    });
-  } else {
-    scheduleNextReset();
+    }
+  } catch (error) {
+    console.error('Error starting daily reset worker:', error);
   }
 }
 

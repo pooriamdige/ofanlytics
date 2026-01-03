@@ -223,23 +223,29 @@ export async function initializeRuleCheckers(): Promise<void> {
 export function startRuleCheckerWorker(): void {
   console.log('Starting rule checker worker...');
 
-  // Initialize for existing accounts
-  initializeRuleCheckers();
+  // Initialize for existing accounts (async, don't block)
+  initializeRuleCheckers().catch((error) => {
+    console.error('Error initializing rule checkers:', error);
+  });
 
   // Periodically check for new accounts that need rule checking
   setInterval(async () => {
-    const accounts = await db('accounts')
-      .where({ is_connected: true, is_failed: false })
-      .whereNotNull('hash');
+    try {
+      const accounts = await db('accounts')
+        .where({ is_connected: true, is_failed: false })
+        .whereNotNull('hash');
 
-    for (const account of accounts) {
-      if (!ruleCheckers.has(account.id)) {
-        try {
-          await startRuleChecker(account.id);
-        } catch (error) {
-          console.error(`Failed to start rule checker for account ${account.id}:`, error);
+      for (const account of accounts) {
+        if (!ruleCheckers.has(account.id)) {
+          try {
+            await startRuleChecker(account.id);
+          } catch (error) {
+            console.error(`Failed to start rule checker for account ${account.id}:`, error);
+          }
         }
       }
+    } catch (error) {
+      console.error('Error in rule checker interval:', error);
     }
   }, 60000); // Check every minute
 }
