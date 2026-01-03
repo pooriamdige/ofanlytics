@@ -36,10 +36,29 @@ class OneFunders_Analytics_WooCommerce {
         
         // Get account details from order meta
         // Only sync if ALL required fields exist: account_type, login, investor_password, server
+        // Try both prefixed and non-prefixed meta keys
         $login = $order->get_meta('_onefunders_login');
+        if (!$login) {
+            $login = $order->get_meta('login');
+        }
+        
         $server = $order->get_meta('_onefunders_server');
+        if (!$server) {
+            $server = $order->get_meta('server');
+        }
+        
         $investor_password = $order->get_meta('_onefunders_investor_password');
+        if (!$investor_password) {
+            $investor_password = $order->get_meta('investor_password');
+        }
+        if (!$investor_password) {
+            $investor_password = $order->get_meta('master_pass'); // Use master_pass as fallback
+        }
+        
         $account_type = $order->get_meta('_onefunders_account_type');
+        if (!$account_type) {
+            $account_type = $order->get_meta('account_type');
+        }
         
         // All fields must exist for sync
         if (!$login || !$server || !$investor_password || !$account_type) {
@@ -141,10 +160,29 @@ class OneFunders_Analytics_WooCommerce {
         $account_keys_from_orders = array(); // Track which accounts exist in orders
         
         foreach ($all_orders as $order) {
+            // Try both prefixed and non-prefixed meta keys
             $login = $order->get_meta('_onefunders_login');
+            if (!$login) {
+                $login = $order->get_meta('login');
+            }
+            
             $server = $order->get_meta('_onefunders_server');
+            if (!$server) {
+                $server = $order->get_meta('server');
+            }
+            
             $investor_password = $order->get_meta('_onefunders_investor_password');
+            if (!$investor_password) {
+                $investor_password = $order->get_meta('investor_password');
+            }
+            if (!$investor_password) {
+                $investor_password = $order->get_meta('master_pass'); // Use master_pass as fallback
+            }
+            
             $account_type = $order->get_meta('_onefunders_account_type');
+            if (!$account_type) {
+                $account_type = $order->get_meta('account_type');
+            }
             
             // Only process if ALL required fields exist
             if (!$login || !$server || !$investor_password || !$account_type) {

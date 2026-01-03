@@ -83,7 +83,7 @@ router.post('/connect', async (req: Request, res: Response) => {
     
     if (existing) {
       // Update existing account with new hash
-      [account] = await db('accounts')
+      await db('accounts')
         .where({ id: existing.id })
         .update({
           hash,
@@ -96,11 +96,15 @@ router.post('/connect', async (req: Request, res: Response) => {
           connection_error: null,
           plan_id: plan_id || null,
           updated_at: new Date(),
-        })
-        .returning('*');
+        });
+      
+      // Fetch updated account
+      account = await db('accounts')
+        .where({ id: existing.id })
+        .first();
     } else {
       // Create new account
-      [account] = await db('accounts')
+      const [insertedId] = await db('accounts')
         .insert({
           wp_user_id,
           login,
@@ -118,7 +122,16 @@ router.post('/connect', async (req: Request, res: Response) => {
           created_at: new Date(),
           updated_at: new Date(),
         })
-        .returning('*');
+        .returning('id');
+      
+      // Fetch created account
+      account = await db('accounts')
+        .where({ id: insertedId.id || insertedId })
+        .first();
+    }
+    
+    if (!account) {
+      throw new Error('Failed to create or update account');
     }
 
     res.json({

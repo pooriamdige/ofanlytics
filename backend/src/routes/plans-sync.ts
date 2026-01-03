@@ -26,7 +26,7 @@ router.post('/sync', async (req: Request, res: Response) => {
     
     if (existing) {
       // Update existing plan
-      [plan] = await db('plans')
+      await db('plans')
         .where({ id: existing.id })
         .update({
           daily_dd_percent,
@@ -34,11 +34,15 @@ router.post('/sync', async (req: Request, res: Response) => {
           daily_dd_is_floating: daily_dd_is_floating || false,
           max_dd_is_floating: max_dd_is_floating || false,
           updated_at: new Date(),
-        })
-        .returning('*');
+        });
+      
+      // Fetch updated plan
+      plan = await db('plans')
+        .where({ id: existing.id })
+        .first();
     } else {
       // Create new plan
-      [plan] = await db('plans')
+      const [insertedId] = await db('plans')
         .insert({
           name: account_type,
           daily_dd_percent,
@@ -48,15 +52,32 @@ router.post('/sync', async (req: Request, res: Response) => {
           created_at: new Date(),
           updated_at: new Date(),
         })
-        .returning('*');
+        .returning('id');
+      
+      // Fetch created plan
+      plan = await db('plans')
+        .where({ id: insertedId.id || insertedId })
+        .first();
+    }
+
+    if (!plan) {
+      throw new Error('Failed to create or update plan');
     }
 
     res.json({ plan });
   } catch (error: any) {
+    console.error('Plan sync error:', error);
     if (error.code === '23505') {
       res.status(409).json({ error: { code: 'DUPLICATE_PLAN', message: 'Plan with this name already exists' } });
     } else {
-      res.status(400).json({ error: formatError(error) });
+      const errorMessage = error.message || String(error);
+      res.status(400).json({ 
+        error: { 
+          code: 'SYNC_ERROR', 
+          message: errorMessage,
+          details: formatError(error)
+        } 
+      });
     }
   }
 });

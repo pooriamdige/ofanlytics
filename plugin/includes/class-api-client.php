@@ -44,11 +44,14 @@ class OneFunders_Analytics_API_Client {
         $body = wp_remote_retrieve_body($response);
         $decoded = json_decode($body, true);
         
-        if ($decoded === null) {
+        if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+            // Log the actual response for debugging
+            error_log('OneFunders API: Invalid JSON response. Status: ' . $status_code . ', Body: ' . substr($body, 0, 500));
             return array(
                 'error' => array(
                     'code' => 'INVALID_RESPONSE',
-                    'message' => 'Invalid JSON response',
+                    'message' => 'Invalid JSON response: ' . json_last_error_msg() . ' (Status: ' . $status_code . ')',
+                    'raw_response' => substr($body, 0, 500), // First 500 chars for debugging
                 ),
             );
         }

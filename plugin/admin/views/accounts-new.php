@@ -102,20 +102,42 @@ if (class_exists('WooCommerce')) {
     ));
     
     foreach ($orders as $order) {
+        // Try both prefixed and non-prefixed meta keys
         $login = $order->get_meta('_onefunders_login');
+        if (!$login) {
+            $login = $order->get_meta('login');
+        }
+        
         $server = $order->get_meta('_onefunders_server');
+        if (!$server) {
+            $server = $order->get_meta('server');
+        }
+        
+        // Try investor_password first, then master_pass as fallback
         $investor_password = $order->get_meta('_onefunders_investor_password');
+        if (!$investor_password) {
+            $investor_password = $order->get_meta('investor_password');
+        }
+        if (!$investor_password) {
+            $investor_password = $order->get_meta('master_pass'); // Use master_pass as fallback
+        }
         
         if ($login && $server && $investor_password) {
             $key = $login . '|' . $server;
             if (!isset($accounts[$key])) {
+                // Get account_type
+                $account_type = $order->get_meta('_onefunders_account_type');
+                if (!$account_type) {
+                    $account_type = $order->get_meta('account_type');
+                }
+                
                 $accounts[$key] = array(
                     'order_id' => $order->get_id(),
                     'wp_user_id' => $order->get_user_id(),
                     'login' => $login,
                     'server' => $server,
                     'investor_password' => $investor_password,
-                    'account_type' => $order->get_meta('_onefunders_account_type'),
+                    'account_type' => $account_type,
                     'hash' => $order->get_meta('_onefunders_hash'),
                     'account_id' => $order->get_meta('_onefunders_account_id'),
                     'is_connected' => $order->get_meta('_onefunders_is_connected') === '1',
@@ -148,7 +170,29 @@ foreach ($plans as $plan) {
     <?php endif; ?>
     
     <?php if (empty($accounts)): ?>
-        <p>No accounts found in WooCommerce orders.</p>
+        <div class="notice notice-warning">
+            <p><strong>No accounts found in WooCommerce orders.</strong></p>
+            <p>Debug info:</p>
+            <ul>
+                <li>WooCommerce active: <?php echo class_exists('WooCommerce') ? 'Yes' : 'No'; ?></li>
+                <li>Total orders checked: <?php echo isset($orders) ? count($orders) : 0; ?></li>
+            </ul>
+            <?php if (class_exists('WooCommerce') && isset($orders) && count($orders) > 0): ?>
+                <p>Sample order meta keys (first order):</p>
+                <pre><?php 
+                $sample_order = $orders[0];
+                $all_meta = $sample_order->get_meta_data();
+                foreach ($all_meta as $meta) {
+                    $value = $meta->value;
+                    // Mask passwords
+                    if (stripos($meta->key, 'pass') !== false || stripos($meta->key, 'password') !== false) {
+                        $value = str_repeat('*', min(strlen($value), 10));
+                    }
+                    echo esc_html($meta->key . ' = ' . $value) . "\n";
+                }
+                ?></pre>
+            <?php endif; ?>
+        </div>
     <?php else: ?>
         <table class="wp-list-table widefat fixed striped">
             <thead>
