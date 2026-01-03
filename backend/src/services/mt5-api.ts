@@ -100,6 +100,18 @@ export class MT5APIClient {
       });
 
       const hash = String(response.data).trim();
+      
+      // Check if response is actually an error JSON
+      if (hash.startsWith('{') || hash.startsWith('[')) {
+        try {
+          const errorData = JSON.parse(hash);
+          throw new Error(errorData.message || 'MT5 API returned an error');
+        } catch (parseError) {
+          // If it's not valid JSON, continue with original error
+          throw new Error(`MT5 API returned invalid response: ${hash.substring(0, 100)}`);
+        }
+      }
+      
       if (!hash || hash.length < 30) {
         throw new Error(`Invalid hash format: ${hash}`);
       }

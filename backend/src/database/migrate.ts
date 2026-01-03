@@ -6,6 +6,7 @@ import * as migration004 from './migrations/004_create_equity_peaks';
 import * as migration005 from './migrations/005_create_orders';
 import * as migration006 from './migrations/006_create_account_metrics';
 import * as migration007 from './migrations/007_add_last_orders_fetched_at';
+import * as migration008 from './migrations/008_restructure_accounts';
 
 async function runMigrations() {
   try {
@@ -72,6 +73,15 @@ async function runMigrations() {
       console.log('✓ Added last_orders_fetched_at to accounts table');
     } else {
       console.log('✓ last_orders_fetched_at column already exists, skipping');
+    }
+    
+    // Migration 008 restructures accounts table
+    const hasIsConnected = await db.schema.hasColumn('accounts', 'is_connected');
+    if (!hasIsConnected) {
+      await migration008.up(db);
+      console.log('✓ Restructured accounts table (migration 008)');
+    } else {
+      console.log('✓ accounts table already restructured, skipping migration 008');
     }
     
     console.log('All migrations completed successfully!');

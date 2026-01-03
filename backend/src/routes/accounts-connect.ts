@@ -34,6 +34,11 @@ router.post('/connect', async (req: Request, res: Response) => {
       console.log(`Connecting to MT5 API for login: ${login}, server: ${server}`);
       hash = await mt5Client.connectEx(login, investor_password, server);
       console.log(`Successfully connected, got hash: ${hash.substring(0, 20)}...`);
+      
+      // Validate hash is actually a UUID, not an error message
+      if (hash.length < 30 || hash.includes('{') || hash.includes('message')) {
+        throw new Error(`Invalid hash received from MT5 API: ${hash.substring(0, 100)}`);
+      }
     } catch (error: any) {
       console.error(`MT5 API connection failed for login ${login}:`, error.message);
       return res.status(400).json({
