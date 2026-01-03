@@ -1,6 +1,6 @@
 import { db } from '../database/connection';
 import { MT5APIClient } from '../services/mt5-api';
-import { getTehranDateString, getNextResetTime, getSecondsUntilReset } from '../utils/timezone';
+import { getNextResetTime, getSecondsUntilReset } from '../utils/timezone';
 
 const MT5_API_URL = process.env.MT5_API_URL || 'http://188.213.198.109:5000';
 const mt5Client = new MT5APIClient(MT5_API_URL);

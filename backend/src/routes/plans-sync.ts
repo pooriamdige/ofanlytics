@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database/connection';
-import { NotFoundError, ValidationError, formatError } from '../utils/errors';
+import { ValidationError, formatError } from '../utils/errors';
 
 const router = Router();
 
@@ -86,7 +86,7 @@ router.post('/sync', async (req: Request, res: Response) => {
  * GET /api/plans
  * List all plans
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const plans = await db('plans').select('*').orderBy('id');
     res.json({ plans });

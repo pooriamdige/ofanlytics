@@ -168,7 +168,7 @@ export class MTAPIWebSocketClient extends EventEmitter {
    * Attempt to reconnect with exponential backoff
    * Note: sessionId parameter kept for compatibility but not used in URL
    */
-  private async attemptReconnect(sessionId?: string): void {
+  private async attemptReconnect(_sessionId?: string): Promise<void> {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('Max reconnection attempts reached');
       this.emit('reconnectFailed');

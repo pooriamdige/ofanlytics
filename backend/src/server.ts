@@ -19,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 
 // Health check
-app.get('/health', async (req: Request, res: Response) => {
+app.get('/health', async (_req: Request, res: Response) => {
   const dbConnected = await testConnection();
   res.json({
     status: 'ok',
@@ -34,13 +34,13 @@ app.use('/api/accounts', accountsConnectRouter);
 app.use('/api/analytics', analyticsRouter);
 
 // Error handler
-app.use((err: Error, req: Request, res: Response, next: Function) => {
+app.use((err: Error, _req: Request, res: Response, _next: Function) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: formatError(err) });
 });
 
 // 404 handler
-app.use((req: Request, res: Response) => {
+app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } });
 });
 

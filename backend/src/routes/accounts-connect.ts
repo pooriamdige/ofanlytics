@@ -134,7 +134,7 @@ router.post('/connect', async (req: Request, res: Response) => {
       throw new Error('Failed to create or update account');
     }
 
-    res.json({
+    return res.json({
       account: {
         id: account.id,
         hash: account.hash,
@@ -144,7 +144,7 @@ router.post('/connect', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    res.status(400).json({ error: formatError(error) });
+    return res.status(400).json({ error: formatError(error) });
   }
 });
 

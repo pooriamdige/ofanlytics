@@ -67,11 +67,12 @@ export interface Order {
 
 export class MTAPIClient {
   private client: AxiosInstance;
-  private baseURL: string;
+  // baseURL is stored but accessed via this.client which has it
+  // private baseURL: string;
   private brokerTimezone: string;
 
   constructor(baseURL: string, brokerTimezone?: string) {
-    this.baseURL = baseURL;
+    // Store baseURL in client instance
     // Broker timezone - default to UTC+2 (Europe/Istanbul or similar)
     // Can be overridden via BROKER_TIMEZONE env var or parameter
     // Common options: 'Europe/Istanbul' (UTC+2), 'Asia/Tehran' (UTC+3:30), 'UTC' (UTC+0)

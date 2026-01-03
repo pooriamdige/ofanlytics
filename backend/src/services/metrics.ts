@@ -2,8 +2,6 @@ import { db } from '../database/connection';
 import { getTehranDateString } from '../utils/timezone';
 import {
   calculateDrawdownMetrics,
-  calculateDailyPeakEquity,
-  calculateAllTimePeakEquity,
 } from '../utils/dd-calculator';
 import type { Plan } from '../utils/dd-calculator';
 

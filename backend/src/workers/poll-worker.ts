@@ -1,9 +1,7 @@
 import { db } from '../database/connection';
 import { MTAPIClient } from '../services/mtapi';
-import { computeAndStoreMetrics, getDailyStartEquity } from '../services/metrics';
-import { updateEquityPeak } from '../services/metrics';
+import { computeAndStoreMetrics } from '../services/metrics';
 import {
-  calculateDrawdownMetrics,
   shouldEnterLiveMonitoring,
   shouldExitLiveMonitoring,
   checkDailyViolation,
@@ -259,7 +257,8 @@ async function processAccount(account: any): Promise<void> {
       .orderBy('computed_at', 'desc')
       .first();
 
-    const plan = await db('plans').where({ id: account.plan_id }).first();
+    // Plan fetched but not used in this context
+    // const plan = await db('plans').where({ id: account.plan_id }).first();
 
     // Check violations
     const dailyViolation = checkDailyViolation(

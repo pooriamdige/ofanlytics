@@ -95,7 +95,7 @@ router.get('/:hash', async (req: Request, res: Response) => {
     );
     const tradingDays = tradingDates.size;
 
-    res.json({
+    return res.json({
       balance: accountSummary.balance,
       equity: accountSummary.equity,
       order_history: filteredOrders.map((order) => ({
@@ -135,9 +135,9 @@ router.get('/:hash', async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof NotFoundError) {
-      res.status(404).json({ error: formatError(error) });
+      return res.status(404).json({ error: formatError(error) });
     } else {
-      res.status(500).json({ error: formatError(error) });
+      return res.status(500).json({ error: formatError(error) });
     }
   }
 });

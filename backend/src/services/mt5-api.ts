@@ -70,10 +70,11 @@ export interface MT5OrderHistoryPaginationResponse {
 
 export class MT5APIClient {
   private client: AxiosInstance;
-  private baseURL: string;
+  // baseURL is stored but accessed via this.client which has it
+  // private baseURL: string;
 
   constructor(baseURL: string) {
-    this.baseURL = baseURL;
+    // Store baseURL in client instance
     this.client = axios.create({
       baseURL,
       timeout: 60000, // 60 seconds

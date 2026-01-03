@@ -5,7 +5,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 
 const MT5_API_URL = process.env.MT5_API_URL || 'http://188.213.198.109:5000';
 const MT5_WS_URL = process.env.MT5_WS_URL || 'ws://188.213.198.109:5000';
-const mt5Client = new MT5APIClient(MT5_API_URL);
+// mt5Client not used in this file, removed
 
 interface WebSocketMessage {
   type: string;

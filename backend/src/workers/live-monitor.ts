@@ -15,7 +15,7 @@ const wsManager = new WebSocketManager(MTAPI_EVENTS_URL);
 /**
  * Handle order profit event
  */
-async function handleOrderProfit(accountId: number, event: any): Promise<void> {
+async function handleOrderProfit(accountId: number, _event: any): Promise<void> {
   try {
     // Recompute metrics immediately
     await computeAndStoreMetrics(accountId);

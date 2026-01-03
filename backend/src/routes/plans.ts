@@ -8,7 +8,7 @@ const router = Router();
  * GET /api/plans
  * List all plans
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const plans = await db('plans').select('*').orderBy('id');
     res.json({ plans });
