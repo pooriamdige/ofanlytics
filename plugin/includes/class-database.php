@@ -21,31 +21,37 @@ class OneFunders_Analytics_Database {
             wp_user_id bigint(20) NOT NULL,
             login varchar(50) NOT NULL,
             server varchar(100) NOT NULL,
+            backend_account_id bigint(20) DEFAULT NULL,
+            hash varchar(100) DEFAULT NULL,
             plan_id bigint(20) DEFAULT NULL,
-            is_failed tinyint(1) DEFAULT 0,
-            failure_reason text DEFAULT NULL,
+            is_connected tinyint(1) DEFAULT 0,
+            connection_error text DEFAULT NULL,
+            connected_at datetime DEFAULT NULL,
+            order_id bigint(20) DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            last_synced_at datetime DEFAULT NULL,
             PRIMARY KEY (id),
             UNIQUE KEY login_server (login, server),
             KEY wp_user_id (wp_user_id),
-            KEY plan_id (plan_id)
+            KEY plan_id (plan_id),
+            KEY hash (hash)
         ) $charset_collate;";
         
         // Plans table (cache from backend)
         $table_plans = $wpdb->prefix . 'onefunders_plans';
         $sql_plans = "CREATE TABLE IF NOT EXISTS $table_plans (
             id bigint(20) NOT NULL AUTO_INCREMENT,
-            backend_plan_id bigint(20) NOT NULL,
-            name varchar(255) NOT NULL,
-            daily_dd_percent decimal(5,2) NOT NULL,
-            max_dd_percent decimal(5,2) NOT NULL,
+            account_type varchar(255) NOT NULL,
+            backend_plan_id bigint(20) DEFAULT NULL,
+            daily_dd_percent decimal(5,2) DEFAULT NULL,
+            max_dd_percent decimal(5,2) DEFAULT NULL,
             daily_dd_is_floating tinyint(1) DEFAULT 0,
             max_dd_is_floating tinyint(1) DEFAULT 0,
             synced_at datetime DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY backend_plan_id (backend_plan_id)
+            UNIQUE KEY account_type (account_type)
         ) $charset_collate;";
         
         // Account type mapping table

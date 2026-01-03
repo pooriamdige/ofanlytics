@@ -61,11 +61,11 @@ class OneFunders_Analytics_Admin {
     }
     
     public function render_plans_page() {
-        require_once ONEFUNDERS_ANALYTICS_PLUGIN_DIR . 'admin/views/plans.php';
+        require_once ONEFUNDERS_ANALYTICS_PLUGIN_DIR . 'admin/views/plans-new.php';
     }
     
     public function render_accounts_page() {
-        require_once ONEFUNDERS_ANALYTICS_PLUGIN_DIR . 'admin/views/accounts.php';
+        require_once ONEFUNDERS_ANALYTICS_PLUGIN_DIR . 'admin/views/accounts-new.php';
     }
     
     public function render_settings_page() {

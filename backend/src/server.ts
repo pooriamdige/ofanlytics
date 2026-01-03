@@ -1,11 +1,13 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
-import plansRouter from './routes/plans';
-import accountsRouter from './routes/accounts';
+import plansSyncRouter from './routes/plans-sync';
+import accountsConnectRouter from './routes/accounts-connect';
 import analyticsRouter from './routes/analytics';
 import { testConnection } from './database/connection';
 import { formatError } from './utils/errors';
+import { startRuleCheckerWorker } from './workers/rule-checker';
+import { startDailyResetWorker } from './workers/daily-reset';
 
 config();
 
@@ -27,9 +29,9 @@ app.get('/health', async (req: Request, res: Response) => {
 });
 
 // API Routes
-app.use('/api/plans', plansRouter);
-app.use('/api/accounts', accountsRouter);
-app.use('/api/accounts', analyticsRouter);
+app.use('/api/plans', plansSyncRouter);
+app.use('/api/accounts', accountsConnectRouter);
+app.use('/api/analytics', analyticsRouter);
 
 // Error handler
 app.use((err: Error, req: Request, res: Response, next: Function) => {
@@ -46,6 +48,10 @@ app.use((req: Request, res: Response) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Start background workers
+  startRuleCheckerWorker();
+  startDailyResetWorker();
 });
 
 export default app;

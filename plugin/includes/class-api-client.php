@@ -65,32 +65,16 @@ class OneFunders_Analytics_API_Client {
         return $this->request('GET', '/api/plans');
     }
     
-    public function create_plan($data) {
-        return $this->request('POST', '/api/plans', $data);
+    public function sync_plan($data) {
+        return $this->request('POST', '/api/plans/sync', $data);
     }
     
-    public function update_plan($id, $data) {
-        return $this->request('PUT', '/api/plans/' . $id, $data);
+    public function connect_account($data) {
+        return $this->request('POST', '/api/accounts/connect', $data);
     }
     
-    public function delete_plan($id) {
-        return $this->request('DELETE', '/api/plans/' . $id);
-    }
-    
-    public function get_accounts($wp_user_id) {
-        return $this->request('GET', '/api/accounts?wp_user_id=' . $wp_user_id);
-    }
-    
-    public function create_account($data) {
-        return $this->request('POST', '/api/accounts', $data);
-    }
-    
-    public function update_account($id, $data) {
-        return $this->request('PUT', '/api/accounts/' . $id, $data);
-    }
-    
-    public function get_analytics($account_id, $wp_user_id) {
-        return $this->request('GET', '/api/accounts/' . $account_id . '/analytics?wp_user_id=' . $wp_user_id);
+    public function get_analytics($hash) {
+        return $this->request('GET', '/api/analytics/' . $hash);
     }
     
     public function get_orders($account_id, $wp_user_id, $page = 1, $per_page = 50, $from = null, $to = null) {
